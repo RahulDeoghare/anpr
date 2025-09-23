@@ -42,6 +42,8 @@ input/
 debug_plates/
 19thSept/
 19thSept_Output/
+output/
+json_local/
 
 # OS
 .DS_Store
