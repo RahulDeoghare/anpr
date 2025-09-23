@@ -6,6 +6,7 @@ import os
 import re
 import json
 import glob
+import boto3
 from ultralytics import YOLO
 from paddleocr import PaddleOCR
 
@@ -13,6 +14,14 @@ from paddleocr import PaddleOCR
 INPUT_FOLDER = "/home/ubantu/vms/data/screenshots"
 MODEL_PATH = "truck.pt"
 OUTPUT_FOLDER = "json_results"
+
+# # DigitalOcean Spaces credentials
+# DO_SPACES_KEY = 'DO801UYGLUGLVCDQFYNM'
+# DO_SPACES_SECRET = 'fBDdr0Cp5NmbkSkD0jeRgE+oIaOZcOdSfzOautQGnL4'
+# DO_SPACES_REGION = 'blr1'
+# DO_SPACES_ENDPOINT = 'https://blr1.digitaloceanspaces.com'
+# DO_SPACES_BUCKET = 'vigilscreenshots'
+# DO_SPACES_FOLDER = 'anpr_json'
 
 def extract_datetime_from_filename(filename):
     """
@@ -352,7 +361,8 @@ def process_single_image(image_path, model, ocr, output_folder, sequence_number)
                 if plate_result and plate_result['confidence'] > best_confidence:
                     log_message(f"Valid Indian plate detected: {plate_result['formatted_text']}", "SUCCESS")
                     
-                    best_plate = plate_result['text'].replace(" ", "")  # Remove spaces for clean format
+                    # Use formatted plate (with spaces) for the JSON output
+                    best_plate = plate_result['formatted_text']  # Keep spaces for frontend
                     best_confidence = plate_result['confidence']
                     
                     # Create success image
@@ -396,7 +406,7 @@ def process_single_image(image_path, model, ocr, output_folder, sequence_number)
     return result_data, date_str, time_str
 
 def save_date_results(date_str, date_results, output_folder):
-    """Save results for a specific date immediately"""
+    """Save results for a specific date immediately in array format"""
     if not date_results:
         log_message(f"No valid results for date {date_str}", "ERROR")
         return False
@@ -407,22 +417,18 @@ def save_date_results(date_str, date_results, output_folder):
     # Calculate plates detected for this date
     plates_detected = sum(1 for r in date_results if r['plate'])
     
-    json_data = {
-        "date": date_str,
-        "total_detections": len(date_results),
-        "plates_detected": plates_detected,
-        "processing_timestamp": datetime.now().isoformat(),
-        "results": date_results
-    }
-    
+    # Save as simple array format (not wrapped in object)
     json_filename = f"{date_str}.json"
     json_path = os.path.join(output_folder, json_filename)
     
     try:
         with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(json_data, f, indent=2, ensure_ascii=False)
+            json.dump(date_results, f, indent=2, ensure_ascii=False)  # Direct array, not wrapped
         
         log_message(f"✅ DATE COMPLETE: Results for {date_str} saved to {json_filename}", "SUCCESS")
+        
+        # Upload to DigitalOcean Spaces
+        upload_success = upload_json_to_spaces(json_path, json_filename)
         
         # Print summary for this date
         print(f"\n{'='*90}")
@@ -433,11 +439,33 @@ def save_date_results(date_str, date_results, output_folder):
         print(f"   📄 JSON file: {json_filename}")
         print(f"   💾 Available for review now!")
         print(f"   🔍 File location: {json_path}")
+        if upload_success:
+            print(f"   ☁️  Uploaded to S3: {DO_SPACES_FOLDER}/{json_filename}")
+        else:
+            print(f"   ⚠️  S3 upload failed - check logs")
         
         return True
         
     except Exception as e:
         log_message(f"Failed to save JSON for date {date_str}: {e}", "ERROR")
+        return False
+
+def upload_json_to_spaces(local_json_path, remote_filename):
+    """Upload JSON file to DigitalOcean Spaces"""
+    try:
+        remote_path = f"{DO_SPACES_FOLDER}/{remote_filename}"
+        session = boto3.session.Session()
+        client = session.client('s3',
+            region_name=DO_SPACES_REGION,
+            endpoint_url=DO_SPACES_ENDPOINT,
+            aws_access_key_id=DO_SPACES_KEY,
+            aws_secret_access_key=DO_SPACES_SECRET
+        )
+        client.upload_file(local_json_path, DO_SPACES_BUCKET, remote_path)
+        log_message(f"📤 Uploaded {remote_filename} to DigitalOcean Spaces: {remote_path}", "SUCCESS")
+        return True
+    except Exception as e:
+        log_message(f"Failed to upload {remote_filename} to DigitalOcean Spaces: {e}", "ERROR")
         return False
 
 def main():
@@ -574,23 +602,22 @@ def main():
     
     if total_json_files_created > 0:
         print(f"\n✅ SUCCESS: Results saved as JSON files in '{OUTPUT_FOLDER}/' folder")
+        print(f"☁️  All JSON files uploaded to DigitalOcean Spaces: {DO_SPACES_BUCKET}/{DO_SPACES_FOLDER}/")
         print(f"💡 Each JSON file contains:")
-        print(f"   • date: The date from filename")
-        print(f"   • total_detections: Number of images processed for that date")
-        print(f"   • plates_detected: Number of valid plates found")
-        print(f"   • results: Array of detection results sorted by time")
-        print(f"   • Each result has:")
+        print(f"   • Array format - ready for frontend consumption")
+        print(f"   • Each object has:")
         print(f"     - sequence: Image sequence number")
-        print(f"     - plate: Detected license plate (empty if none)")
-        print(f"     - timestamp_formatted: Actual time from filename")
+        print(f"     - plate: Detected license plate (formatted with spaces)")
+        print(f"     - frame: Frame number")
+        print(f"     - timestamp_formatted: Actual time from filename (HH:MM)")
         print(f"     - confidence: OCR confidence score")
         print(f"     - status: 'confirmed' or 'please review this once'")
         
-        print(f"\n📋 JSON files created:")
+        print(f"\n📋 JSON files created and uploaded:")
         for date_str in sorted(date_groups.keys()):
             json_filename = f"{date_str}.json"
             if os.path.exists(os.path.join(OUTPUT_FOLDER, json_filename)):
-                print(f"   • {json_filename}")
+                print(f"   • {json_filename} → {DO_SPACES_FOLDER}/{json_filename}")
     else:
         print(f"\n❌ No JSON files were created")
     

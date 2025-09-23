@@ -11,17 +11,17 @@ from ultralytics import YOLO
 from paddleocr import PaddleOCR
 
 # Configuration
-INPUT_FOLDER = "/home/ubantu/vms/data/screenshots"
+INPUT_FOLDER = "/home/ubantu/anpr/input"
 MODEL_PATH = "truck.pt"
 OUTPUT_FOLDER = "json_results"
 
-# DigitalOcean Spaces credentials
-DO_SPACES_KEY = 'DO801UYGLUGLVCDQFYNM'
-DO_SPACES_SECRET = 'fBDdr0Cp5NmbkSkD0jeRgE+oIaOZcOdSfzOautQGnL4'
-DO_SPACES_REGION = 'blr1'
-DO_SPACES_ENDPOINT = 'https://blr1.digitaloceanspaces.com'
-DO_SPACES_BUCKET = 'vigilscreenshots'
-DO_SPACES_FOLDER = 'anpr_json'
+# # DigitalOcean Spaces credentials
+# DO_SPACES_KEY = 'DO801UYGLUGLVCDQFYNM'
+# DO_SPACES_SECRET = 'fBDdr0Cp5NmbkSkD0jeRgE+oIaOZcOdSfzOautQGnL4'
+# DO_SPACES_REGION = 'blr1'
+# DO_SPACES_ENDPOINT = 'https://blr1.digitaloceanspaces.com'
+# DO_SPACES_BUCKET = 'vigilscreenshots'
+# DO_SPACES_FOLDER = 'anpr_json'
 
 def extract_datetime_from_filename(filename):
     """
@@ -351,7 +351,7 @@ def process_single_image(image_path, model, ocr, output_folder, sequence_number)
             processed_img = process_plate_image(extracted_region)
             
             if processed_img is not None:
-                # Save processed version
+                # Save processed version (zoomed out to 30% for clarity)
                 processed_path = os.path.join(debug_folder, f"processed_region_{i+1}.jpg")
                 cv2.imwrite(processed_path, processed_img)
                 

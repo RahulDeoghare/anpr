@@ -34,6 +34,15 @@ ENV/
 *.swp
 *.swo
 
+# Project output and log folders
+logs/
+local_results/
+json_results/
+input/
+debug_plates/
+19thSept/
+19thSept_Output/
+
 # OS
 .DS_Store
 Thumbs.db
