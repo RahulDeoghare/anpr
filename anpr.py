@@ -48,6 +48,10 @@ for image_path in sorted(image_files):
                     conf = line[1][1]
                     detected_texts.append(text)
                     print(f"  Plate {i+1} Text: {text} | Confidence: {conf:.2f}")
+                # Print concatenated result in a single line (no separator)
+                concat_text = ''.join(detected_texts)
+                if concat_text:
+                    print(f"  Plate {i+1} Single Line: {concat_text}")
             else:
                 print(f"  Plate {i+1} Text: No text detected")
             cv2.rectangle(output_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
