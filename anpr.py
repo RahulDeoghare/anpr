@@ -58,9 +58,20 @@ month_dict = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', '
 
 # Store results by date
 
+
 # Store results for the current date only
 current_date = None
 current_date_results = []
+
+# Setup PostgreSQL connection
+conn = psycopg2.connect(
+    dbname="anpr_db",
+    user="anpruser",
+    password="anprpass",
+    host="localhost",
+    port="5432"
+)
+cursor = conn.cursor()
 
 print(f"Watching folders: {image_folder_1} and {image_folder_2} for new images...")
 sys.stdout.flush()
@@ -203,6 +214,25 @@ while True:
                 "status": status
             }
             current_date_results.append(json_data)
+            # Insert into PostgreSQL
+            insert_query = """
+                INSERT INTO anpr_results (
+                    sequence, plate, frame, chunk_file, timestamp_seconds,
+                    timestamp_formatted, confidence, group_size, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (
+                json_data["sequence"],
+                json_data["plate"],
+                json_data["frame"],
+                json_data["chunk_file"],
+                json_data["timestamp_seconds"],
+                json_data["timestamp_formatted"],
+                json_data["confidence"],
+                json_data["group_size"],
+                json_data["status"]
+            ))
+            conn.commit()
         if not found_plate:
             print("  No plates detected by YOLO.")
             # Save JSON result for no plate detected
@@ -218,6 +248,25 @@ while True:
                 "status": "to be reviewed"
             }
             current_date_results.append(json_data)
+            # Insert into PostgreSQL
+            insert_query = """
+                INSERT INTO anpr_results (
+                    sequence, plate, frame, chunk_file, timestamp_seconds,
+                    timestamp_formatted, confidence, group_size, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (
+                json_data["sequence"],
+                json_data["plate"],
+                json_data["frame"],
+                json_data["chunk_file"],
+                json_data["timestamp_seconds"],
+                json_data["timestamp_formatted"],
+                json_data["confidence"],
+                json_data["group_size"],
+                json_data["status"]
+            ))
+            conn.commit()
         # Save the output image
         out_name = os.path.splitext(os.path.basename(image_path))[0] + "_output.jpg"
         out_path = os.path.join(output_folder, out_name)
@@ -239,10 +288,6 @@ if current_date is not None and current_date_results:
     except Exception as e:
         print(f"[ERROR] Failed to upload {out_json_path} to DigitalOcean Spaces: {e}")
 
-conn = psycopg2.connect(
-    dbname="anpr_db",
-    user="anpruser",
-    password="anprpass",
-    host="localhost",
-    port="5432"
-)
+# Close PostgreSQL connection
+cursor.close()
+conn.close()
