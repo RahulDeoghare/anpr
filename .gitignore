@@ -68,3 +68,4 @@ config.ini
 # Large data files
 screenshots/
 data/
+anpr_logs.txt
