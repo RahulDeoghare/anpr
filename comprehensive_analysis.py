@@ -11,9 +11,9 @@ from ultralytics import YOLO
 from paddleocr import PaddleOCR
 
 # Configuration
-INPUT_FOLDER = "/home/ubantu/anpr/input"
+INPUT_FOLDER = "/home/ubantu/vms/data/anpr_ss/"
 MODEL_PATH = "truck.pt"
-OUTPUT_FOLDER = "json_results"
+OUTPUT_FOLDER = "trial_output"
 
 # # DigitalOcean Spaces credentials
 # DO_SPACES_KEY = 'DO801UYGLUGLVCDQFYNM'
@@ -26,11 +26,11 @@ OUTPUT_FOLDER = "json_results"
 def extract_datetime_from_filename(filename):
     """
     Extract date and time from filename pattern like:
-    exit_uuid:53b3850d-e0ef-4668-9fb5-12c980aac83d_10_Sep_2025_22_26_50
+    exit_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d_10_Sep_2025_22_26_50
     Returns: (date_str, time_str, full_datetime_str)
     """
     # Pattern to match the datetime part after the UUID
-    pattern = r'exit_uuid:[a-f0-9-]+_(\d{1,2}_[A-Za-z]{3}_\d{4})_(\d{2}_\d{2}_\d{2})'
+    pattern = r'anpr_uuid_[a-f0-9-]+_(\d{1,2}_[A-Za-z]{3}_\d{4})_(\d{2}_\d{2}_\d{2})'
     match = re.search(pattern, filename)
     if match:
         date_str = match.group(1)  # e.g., "10_Sep_2025"
@@ -49,7 +49,7 @@ def get_matching_images(folder_path):
         return []
     
     # Pattern to match files starting with the specific UUID
-    pattern = os.path.join(folder_path, "exit_uuid:53b3850d-e0ef-4668-9fb5-12c980aac83d*")
+    pattern = os.path.join(folder_path, "anpr_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d*")
     matching_files = glob.glob(pattern)
     
     # Filter for image files
