@@ -69,7 +69,7 @@ conn = psycopg2.connect(
     user="anpruser",
     password="anprpass",
     host="localhost",
-    port="5432"
+    port="5433"
 )
 cursor = conn.cursor()
 
