@@ -15,7 +15,8 @@ from botocore.client import Config
 
 
 # Path to your folder and model
-image_folder = "/home/ubantu/vms/data/screenshots"  # Change this to your folder
+image_folder_1 = "/home/ubantu/vms/data/screenshots"  # First folder
+image_folder_2 = "/home/ubantu/vms/data/anpr_ss/"    # Second folder
 model_path = "truck.pt"        # Path to your YOLO model
 output_folder = "/home/ubantu/anpr/output"  # Folder to save annotated images
 os.makedirs(output_folder, exist_ok=True)
@@ -60,14 +61,25 @@ month_dict = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', '
 current_date = None
 current_date_results = []
 
-print(f"Watching folder: {image_folder} for new images...")
+print(f"Watching folders: {image_folder_1} and {image_folder_2} for new images...")
 sys.stdout.flush()
 while True:
-    allowed_prefixes = ("exit_uuid:53b3850d-e0ef-4668-9fb5-12c980aac83d", "exit_192.168.1.104", "exit_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d")
-    image_files = [f for f in glob.glob(os.path.join(image_folder, "*"))
-                   if f.lower().endswith(image_extensions)
-                   and os.path.basename(f).startswith(allowed_prefixes)]
-    new_images = [f for f in image_files if f not in processed_images]
+
+    # Define allowed prefixes for each folder
+    allowed_prefixes_1 = ("exit_uuid:53b3850d-e0ef-4668-9fb5-12c980aac83d", "exit_192.168.1.104", "exit_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d")
+    allowed_prefixes_2 = ("anpr_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d",)
+
+    # Collect images from both folders
+    image_files_1 = [f for f in glob.glob(os.path.join(image_folder_1, "*"))
+                     if f.lower().endswith(image_extensions)
+                     and os.path.basename(f).startswith(allowed_prefixes_1)]
+    image_files_2 = [f for f in glob.glob(os.path.join(image_folder_2, "*"))
+                     if f.lower().endswith(image_extensions)
+                     and os.path.basename(f).startswith(allowed_prefixes_2)]
+
+    # Merge and filter new images
+    all_image_files = image_files_1 + image_files_2
+    new_images = [f for f in all_image_files if f not in processed_images]
     if not new_images:
         print("[INFO] Waiting for new images...")
         sys.stdout.flush()
