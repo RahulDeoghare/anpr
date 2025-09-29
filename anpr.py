@@ -11,6 +11,7 @@ from datetime import datetime
 import re
 import boto3
 from botocore.client import Config
+import psycopg2
 
 
 
@@ -237,3 +238,11 @@ if current_date is not None and current_date_results:
         print(f"[INFO] Uploaded {out_json_path} to s3://{DO_SPACES_BUCKET}/{s3_key}")
     except Exception as e:
         print(f"[ERROR] Failed to upload {out_json_path} to DigitalOcean Spaces: {e}")
+
+conn = psycopg2.connect(
+    dbname="anpr_db",
+    user="anpruser",
+    password="anprpass",
+    host="localhost",
+    port="5432"
+)
