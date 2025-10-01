@@ -69,3 +69,5 @@ config.ini
 screenshots/
 data/
 anpr_logs.txt
+output_regex/
+anpr_buffer_5sec/

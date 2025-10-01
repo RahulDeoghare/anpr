@@ -15,7 +15,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # File handler
-fh = logging.FileHandler('anpr_logs.txt')
+fh = logging.FileHandler('anpr_logs_regex.txt')
 fh.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(message)s')
 fh.setFormatter(formatter)
@@ -154,7 +154,7 @@ def process_plate_text(raw_texts):
 # Path to your folder and model
 image_folder = "/home/ubantu/vms/data/anpr_ss/"    # Folder to monitor
 model_path = "truck.pt"        # Path to your YOLO model
-output_folder = "/home/ubantu/anpr/output"  # Folder to save annotated images
+output_folder = "/home/ubantu/anpr/output_regex"  # Folder to save annotated images
 os.makedirs(output_folder, exist_ok=True)
 
 # Load YOLO model
