@@ -5,31 +5,19 @@ import logging
 import os
 from typing import Optional, Dict, Any
 
-# Try to load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    # dotenv not installed, environment variables should be set manually
-    pass
-
 class DatabaseConfig:
     """Database configuration and connection management for ANPR system"""
     
     def __init__(self):
-        # Database connection parameters - using environment variables for security
+        # Database connection parameters
         self.db_config = {
-            'host': os.getenv('DB_HOST', 'dbaas-db-2794517-do-user-24101676-0.f.db.ondigitalocean.com'),
-            'port': int(os.getenv('DB_PORT', '25060')),
-            'dbname': os.getenv('DB_NAME', 'trinetra_vms_db_v2'),
-            'user': os.getenv('DB_USER', 'doadmin'),
-            'password': os.getenv('DB_PASSWORD'),  # Must be set in environment
-            'sslmode': os.getenv('DB_SSLMODE', 'require')
+            'host': '',
+            'port': 25060,
+            'dbname': '',
+            'user': '',
+            'password': '',
+            'sslmode': ''
         }
-        
-        # Validate that required environment variables are set
-        if not self.db_config['password']:
-            raise ValueError("DB_PASSWORD environment variable must be set")
         
         # Default values for required fields
         self.default_camera_id = os.getenv('ANPR_CAMERA_ID', '53b3850d-e0ef-4668-9fb5-12c980aac83d')

@@ -9,6 +9,7 @@ import sys
 import re
 from datetime import datetime
 import logging
+from database_config import db
 
 # Configure logging to save to a file and print to console
 logger = logging.getLogger()
@@ -116,6 +117,55 @@ def fix_common_ocr_errors(text):
     
     return text
 
+def extract_datetime_from_filename(filename):
+    """
+    Extract date and time from filename pattern like:
+    anpr_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d_29_Sep_2025_03_02_50.jpg
+    Returns datetime object or None if pattern doesn't match
+    """
+    try:
+        # Remove file extension
+        base_name = os.path.splitext(filename)[0]
+        
+        # Split by underscore and get the date/time parts
+        parts = base_name.split('_')
+        
+        # Find the date pattern (day_month_year_hour_minute_second)
+        # Look for pattern starting with day (number), followed by month name
+        for i in range(len(parts) - 5):  # Need at least 6 parts for date/time
+            if (parts[i].isdigit() and 
+                parts[i+1] in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] and
+                parts[i+2].isdigit() and len(parts[i+2]) == 4 and  # year
+                parts[i+3].isdigit() and len(parts[i+3]) == 2 and  # hour
+                parts[i+4].isdigit() and len(parts[i+4]) == 2 and  # minute
+                parts[i+5].isdigit() and len(parts[i+5]) == 2):    # second
+                
+                day = int(parts[i])
+                month_str = parts[i+1]
+                year = int(parts[i+2])
+                hour = int(parts[i+3])
+                minute = int(parts[i+4])
+                second = int(parts[i+5])
+                
+                # Convert month name to number
+                month_map = {
+                    'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                    'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                }
+                month = month_map[month_str]
+                
+                # Create datetime object
+                extracted_datetime = datetime(year, month, day, hour, minute, second)
+                return extracted_datetime
+        
+        # If no valid pattern found, return None
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract datetime from filename {filename}: {e}")
+        return None
+
 def process_plate_text(raw_texts):
     """
     Process multiple text detections from a single plate
@@ -163,6 +213,18 @@ model = YOLO(model_path)
 # Initialize PaddleOCR (English, CPU)
 ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
 
+# Initialize database connection
+if not db.connect():
+    logger.error("Failed to connect to database. Exiting...")
+    sys.exit(1)
+else:
+    logger.info("Database connection established successfully")
+    # Test the connection
+    if db.test_connection():
+        logger.info("Database test passed")
+    else:
+        logger.warning("Database test failed, but continuing...")
+
 image_extensions = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif")
 processed_images = set()
 
@@ -195,6 +257,7 @@ for image_path in all_image_files:
     output_image = image.copy()
     logger.info(f"\nProcessing: {os.path.basename(image_path)}")
     found_plate = False
+    detected_plates = []  # Store detected plates for database insertion
 
     if results.boxes and len(results.boxes) > 0:
         for i, box in enumerate(results.boxes):
@@ -229,6 +292,14 @@ for image_path in all_image_files:
                 # Use the fixed text for display if valid, otherwise use strict
                 display_text = processed['fixed'] if processed['valid'] else processed['strict']
                 
+                # Store plate data for database insertion
+                if display_text and display_text != 'No Text':
+                    plate_data = {
+                        'plate_number': display_text,
+                        'status': 'valid' if processed['valid'] else 'invalid'
+                    }
+                    detected_plates.append(plate_data)
+                
                 # Color code the rectangle based on validity
                 color = (0, 255, 0) if processed['valid'] else (0, 165, 255)  # Green if valid, orange if not
                 
@@ -252,26 +323,52 @@ for image_path in all_image_files:
     out_name = os.path.splitext(os.path.basename(image_path))[0] + "_output.jpg"
     out_path = os.path.join(output_folder, out_name)
     cv2.imwrite(out_path, output_image)
+    
+    # Extract datetime from filename
+    filename = os.path.basename(image_path)
+    extracted_time = extract_datetime_from_filename(filename)
+    
+    if extracted_time is None:
+        logger.warning(f"Could not extract datetime from filename: {filename}, using current time")
+        extracted_time = datetime.now()
+    else:
+        logger.info(f"Extracted datetime from filename: {extracted_time}")
+    
+    # Insert detected plates into database
+    for plate_data in detected_plates:
+        success = db.insert_anpr_log(
+            plate_number=plate_data['plate_number'],
+            plate_screenshot_path=out_path,
+            status=plate_data['status'],
+            timestamp=extracted_time
+        )
+        
+        if success:
+            logger.info(f"  Plate '{plate_data['plate_number']}' saved to database successfully")
+        else:
+            logger.error(f"  Failed to save plate '{plate_data['plate_number']}' to database")
+    
     processed_images.add(image_path)
 
 logger.info("[INFO] Finished processing all existing images. Now watching for new images...")
 
 # Continuous monitoring loop
-while True:
-    # Define allowed prefixes
-    allowed_prefixes = ("anpr_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d",)
+try:
+    while True:
+        # Define allowed prefixes
+        allowed_prefixes = ("anpr_uuid_53b3850d-e0ef-4668-9fb5-12c980aac83d",)
 
-    # Collect images from the folder
-    image_files = [f for f in glob.glob(os.path.join(image_folder, "*"))
-                   if f.lower().endswith(image_extensions)
-                   and os.path.basename(f).startswith(allowed_prefixes)]
+        # Collect images from the folder
+        image_files = [f for f in glob.glob(os.path.join(image_folder, "*"))
+                       if f.lower().endswith(image_extensions)
+                       and os.path.basename(f).startswith(allowed_prefixes)]
 
-    # Filter new images
-    new_images = [f for f in image_files if f not in processed_images]
-    if not new_images:
-        logger.info("[INFO] Waiting for new images...")
-        time.sleep(2)
-        continue
+        # Filter new images
+        new_images = [f for f in image_files if f not in processed_images]
+        if not new_images:
+            logger.info("[INFO] Waiting for new images...")
+            time.sleep(2)
+            continue
 
     # Sort new_images by filename
     new_images.sort(key=lambda x: os.path.basename(x))
@@ -287,6 +384,7 @@ while True:
         output_image = image.copy()
         logger.info(f"\nProcessing: {os.path.basename(image_path)}")
         found_plate = False
+        detected_plates = []  # Store detected plates for database insertion
 
         if results.boxes and len(results.boxes) > 0:
             for i, box in enumerate(results.boxes):
@@ -321,6 +419,14 @@ while True:
                     # Use the fixed text for display if valid, otherwise use strict
                     display_text = processed['fixed'] if processed['valid'] else processed['strict']
                     
+                    # Store plate data for database insertion
+                    if display_text and display_text != 'No Text':
+                        plate_data = {
+                            'plate_number': display_text,
+                            'status': 'valid' if processed['valid'] else 'invalid'
+                        }
+                        detected_plates.append(plate_data)
+                    
                     # Color code the rectangle based on validity
                     color = (0, 255, 0) if processed['valid'] else (0, 165, 255)  # Green if valid, orange if not
                     
@@ -344,6 +450,41 @@ while True:
         out_name = os.path.splitext(os.path.basename(image_path))[0] + "_output.jpg"
         out_path = os.path.join(output_folder, out_name)
         cv2.imwrite(out_path, output_image)
+        
+        # Extract datetime from filename
+        filename = os.path.basename(image_path)
+        extracted_time = extract_datetime_from_filename(filename)
+        
+        if extracted_time is None:
+            logger.warning(f"Could not extract datetime from filename: {filename}, using current time")
+            extracted_time = datetime.now()
+        else:
+            logger.info(f"Extracted datetime from filename: {extracted_time}")
+        
+        # Insert detected plates into database
+        for plate_data in detected_plates:
+            success = db.insert_anpr_log(
+                plate_number=plate_data['plate_number'],
+                plate_screenshot_path=out_path,
+                status=plate_data['status'],
+                timestamp=extracted_time
+            )
+            
+            if success:
+                logger.info(f"  Plate '{plate_data['plate_number']}' saved to database successfully")
+            else:
+                logger.error(f"  Failed to save plate '{plate_data['plate_number']}' to database")
+        
         processed_images.add(image_path)
 
-# At the end, no flushing needed
+except KeyboardInterrupt:
+    logger.info("Processing interrupted by user")
+except Exception as e:
+    logger.error(f"Unexpected error in processing loop: {e}")
+finally:
+    # At the end, close database connection
+    try:
+        db.disconnect()
+        logger.info("Database connection closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing database connection: {e}")
